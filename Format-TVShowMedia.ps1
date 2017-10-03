@@ -8,14 +8,14 @@ foreach ($episode in $results) {
     
     
     #Get Season
-    if([int]($Season_episode[0].SubString(1)) -le 10) {
+    if([int]$Season_episode[0].SubString(1) -le 9) {
         $Season = 'S0' + $Season_episode[0].SubString(1)
     } else {
         $season = $Season_episode[0].ToUpper()
     }
     
     #Get Episode
-    if([int]($Season_episode[0].SubString(1)) -le 10) {
+    if([int]$Season_episode[1].Trim().SubString(2) -le 9) {
         $episodenumber = '.E0' + $Season_episode[1].Trim().SubString(2)
     } else {
         $episodenumber = '.E' + $Season_episode[1].Trim().SubString(2)
