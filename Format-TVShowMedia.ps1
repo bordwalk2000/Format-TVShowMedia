@@ -1,22 +1,34 @@
 ﻿<#
 .SYNOPSIS
+Renames TV Show files to a specific naming scheme and moves the files to their correct seasons folder.
  
 .DESCRIPTION
-
+The scrips grabs data from IMDB, creates a Season folder for the season it's on, unless one already exists.  Renames the tv shows episodes to the 
+the required naming scheme and then moves the tv shows episodes for that season into the correct seasons folder, and then moves onto the next season.
+After it finishes processing all the seasons empty folders are then removed. 
  
 .PARAMETER FolderPath
-Specifiy the path to the folder where the files are located that need to be renamed and organised.
+Specify the path to the folder where the files are located that need to be renamed and organized.
  
 .PARAMETER URL
+URL to the main page for the TV Show located at IMDB.com.  The script will then use this URL for grabbing the data instead of trying to find it on its own.
 
 .EXAMPLE
+PS C:\> Format-TVShowMedia -FolderPath "C:\Folder"
+PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/title/tt0108778/?ref_=fn_al_tt_1" 
 
 .NOTES
     Author: Bradley Herbst
-    Version: 0.1
-    Last Updated: October 3, 2017
+    Version: 1.0
+    Last Updated: October 5, 2017
         
     ChangeLog
+    1.0
+        Initial Release
+
+
+#Recreate Folder TV Show Structure
+#Get-ChildItem -Path $path -Recurse | ForEach-Object {if($_.Gettype().Name -eq 'DirectoryInfo'){ New-Item -Name $_.BaseName -ItemType Directory -Path C:\#Tools\test } else{ $FolderName = Split-Path $_.Directory -leaf; New-Item -Name $_.Name -Path C:\#Tools\test\$FolderName}}
 #>
 
 [CmdletBinding()]
@@ -28,23 +40,18 @@ param(
 
     BEGIN {
 
-function Get-IMDBTVShowSeasonEpisodes { 
+function Get-IMDBTVShowTitle { 
     [cmdletbinding()]
     param(
         [Parameter(Mandatory)][string] $url
     )
 
-    $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
-    $results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*list_item*'}
+    $HTML = Invoke-WebRequest -Uri $url -ErrorAction Stop
+    $results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*title_wrapper*'}
 
-    foreach ($episode in $results) {
-        $Season_episode = (($episode.childNodes[1].childNodes[1].textContent).Trim()) -split ','
-        $EpisodeName = 'S{0:D2}' -f [int]$Season_episode[0].SubString(1) + '.E{0:D2}' -f [int]$Season_episode[1].Trim().SubString(2) + ' ' + ($episode.childNodes[3].childNodes[5].innerText).Trim()
-        
-        Write-Output $EpisodeName 
-    }
+    Write-Output ($results.getElementsByTagName("h1") | Select-Object -ExpandProperty innerText).trim()
+
 }
-
 
 function Get-IMDBTVShowSeasons { 
     [cmdletbinding()]
@@ -53,15 +60,32 @@ function Get-IMDBTVShowSeasons {
     )
 
     $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
-    $results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*seasons-and-year-nav*'}
+    $Results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*seasons-and-year-nav*'}
     
-    foreach ($season in $results.childNodes[7].innerHTML.trim() -Split(“`n”)) {
+    foreach ($Season in $Results.childNodes[7].innerHTML.trim() -Split(“`n”)) {
         $props = @{
-            'Season' = (($season -split '>')[1]).Substring(0,1);
-            'URL' = 'http://www.imdb.com/' + ($season.TrimStart('<a href="/') -split ';')[0];
+            'Season' = (($Season -split '>')[1]).Substring(0,1);
+            'URL' = 'http://www.imdb.com/' + ($Season.TrimStart('<a href="/') -split ';')[0];
         }
 
         New-Object -TypeName PSObject -Property $props
+    }
+}
+
+function Get-IMDBTVShowSeasonEpisodes { 
+    [cmdletbinding()]
+    param(
+        [Parameter(Mandatory)][string] $url
+    )
+
+    $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
+    $Results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*list_item*'}
+
+    foreach ($Episode in $Results) {
+        $SeasonEpisode = (($Episode.childNodes[1].childNodes[1].textContent).Trim()) -split ','
+        $EpisodeName = 'S{0:D2}' -f [int]$SeasonEpisode[0].SubString(1) + '.E{0:D2}' -f [int]$SeasonEpisode[1].Trim().SubString(2) + ' ' + ($Episode.childNodes[3].childNodes[5].innerText).Trim()
+        
+        Write-Output $EpisodeName 
     }
 }
 
@@ -80,32 +104,42 @@ If (!$url) {
     $SearchQuery = "http://www.imdb.com/find?ref_=nv_sr_fn&q=$SearchString&s=all"
 
     #Search for the course name and pulls the top result.
-    $HTML = Invoke-WebRequest -Uri $SearchQuery 
-    $results = $HTML.ParsedHtml.body.getElementsByTagName("table") | Where{$_.classname -eq 'findList'} | 
-    foreach{$_.getElementsByTagName("tr") | Where{$_.classname -like '*findResult*'}} | Select -First 1
+    $HTML = Invoke-WebRequest -Uri $SearchQuery -ErrorAction Stop
+    $Results = $HTML.ParsedHtml.body.getElementsByTagName("table") | Where{$_.classname -eq 'findList'} | 
+    foreach {$_.getElementsByTagName("tr") | Where{$_.classname -like '*findResult*'}} | Select-Object -First 1
 
-    $url = 'http://www.imdb.com/' + (($results.innerHTML -split '<td class="result_text">')[1].TrimStart('<a href="/') -split '"')[0]
+    $url = 'http://www.imdb.com/' + (($Results.innerHTML -split '<td class="result_text">')[1].TrimStart('<a href="/') -split '"')[0]
 
 }
 
+$TVShowTitle = Get-IMDBTVShowTitle -url $url 
 
-Get-IMDBTVShowSeasons -url $url | Sort Season | 
-% {
+Get-IMDBTVShowSeasons -url $url | Sort-Object Season | 
+Foreach {
     #Create Season Folder if it doesn't exisist
-    if(!(Test-Path -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season)))){New-Item -ItemType directory -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season))}
+    if(!(Test-Path -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season)))){New-Item -ItemType Directory -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season))}
     
     Get-IMDBTVShowSeasonEpisodes -url $_.url | 
-    % {
-       #Looks for files in the $FoldePath Directory and sub directories that are the file extension spcified in the params.
-        Get-ChildItem -Path $FolderPath -Filter "*" -Recurse | 
-        #$TitleName -match "S(?<season>\d{1,2}).(\s*)E(?<episode>\d{1,2})|Season(\d{1,2}).(\s*)Episode(\d{1,2})"
+    Foreach {
+        $EpisodeNumber = ($_ -split ' ')[0]
+        $IllegalChars = [string]::join('',([System.IO.Path]::GetInvalidFileNameChars())) -replace '\\','\\'
+        $EpisodeTitle = $_ -replace "[$IllegalChars]",''
+
+        Get-ChildItem -Path $FolderPath -File -Recurse | 
+        ? { ($_.Name -match ($EpisodeNumber -split '\.')[0] -and $_.Name -match ($EpisodeNumber -split '\.')[1]) -or ($_.Name -match 'S{0:D1}' -f [int]($EpisodeNumber -split '\.')[0].Substring(1) -and $_.Name -match 'E{0:D1}' -f [int]($EpisodeNumber -split '\.')[1].Substring(1))} |
+        Rename-Item -NewName {$TVShowTitle + ' ' + $EpisodeTitle + $_.extension}
+            
+        #Looks for files with the correct chapter and title number in all folders and them moves them to their correct chapter folder
+        Get-ChildItem -Path $FolderPath -File -Recurse |
+        ? { ($_.Name -match ($EpisodeNumber -split '\.')[0] -and $_.Name -match ($EpisodeNumber -split '\.')[1]) -or ($_.Name -match 'S{0:D1}' -f [int]($EpisodeNumber -split '\.')[0].Substring(1) -and $_.Name -match 'E{0:D1}' -f [int]($EpisodeNumber -split '\.')[1].Substring(1))} |
+        Move-Item -Destination ("$FolderPath\Season {0:D2}" -f ([int]$_.Substring(1,2)))
     }
 }
  
 #Looks for folders with no files in them and then deletes the files if any were found.
-Get-ChildItem -Path $FolderPath -recurse | Where {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r | 
+Get-ChildItem -Path $FolderPath -recurse | Where-Object {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r | 
 Where {!$_.PSIsContainer}).Length -eq 0} |
-Remove-Item -recurse
+Remove-Item -Recurse
 
     }
 
