@@ -19,16 +19,16 @@ PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/tit
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.0
-    Last Updated: October 5, 2017
+    Version: 1.1
+    Last Updated: November 9th, 2017
         
     ChangeLog
-    1.0
+    1.0 - 2017-10-05
         Initial Release
+    1.1 - 2017-11-09
+        Verifies that TV Show title name doesn't have any special characters that would interfere with file renaming.
 
 
-#Recreate Folder TV Show Structure
-#Get-ChildItem -Path $path -Recurse | ForEach-Object {if($_.Gettype().Name -eq 'DirectoryInfo'){ New-Item -Name $_.BaseName -ItemType Directory -Path C:\#Tools\test } else{ $FolderName = Split-Path $_.Directory -leaf; New-Item -Name $_.Name -Path C:\#Tools\test\$FolderName}}
 #>
 
 [CmdletBinding()]
@@ -112,7 +112,8 @@ If (!$url) {
 
 }
 
-$TVShowTitle = Get-IMDBTVShowTitle -url $url 
+$IllegalChars = [string]::join('',([System.IO.Path]::GetInvalidFileNameChars())) -replace '\\','\\'
+$TVShowTitle = (Get-IMDBTVShowTitle -url $url) -replace "[$IllegalChars]",''
 
 Get-IMDBTVShowSeasons -url $url | Sort-Object Season | 
 Foreach {
@@ -122,12 +123,11 @@ Foreach {
     Get-IMDBTVShowSeasonEpisodes -url $_.url | 
     Foreach {
         $EpisodeNumber = ($_ -split ' ')[0]
-        $IllegalChars = [string]::join('',([System.IO.Path]::GetInvalidFileNameChars())) -replace '\\','\\'
         $EpisodeTitle = $_ -replace "[$IllegalChars]",''
 
         Get-ChildItem -Path $FolderPath -File -Recurse | 
         ? { ($_.Name -match ($EpisodeNumber -split '\.')[0] -and $_.Name -match ($EpisodeNumber -split '\.')[1]) -or ($_.Name -match 'S{0:D1}' -f [int]($EpisodeNumber -split '\.')[0].Substring(1) -and $_.Name -match 'E{0:D1}' -f [int]($EpisodeNumber -split '\.')[1].Substring(1))} |
-        Rename-Item -NewName {$TVShowTitle + ' ' + $EpisodeTitle + $_.extension}
+        Rename-Item -NewName {$TVShowTitle + ' ' + $EpisodeTitle + $_.extension} -ErrorAction Continue
             
         #Looks for files with the correct chapter and title number in all folders and them moves them to their correct chapter folder
         Get-ChildItem -Path $FolderPath -File -Recurse |
