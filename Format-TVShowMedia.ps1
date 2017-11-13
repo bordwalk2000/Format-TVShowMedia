@@ -19,15 +19,16 @@ PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/tit
 
 .NOTES
     Author: Bradley Herbst
-    Version: 1.1
-    Last Updated: November 9th, 2017
+    Version: 1.2
+    Last Updated: November 13th, 2017
         
     ChangeLog
     1.0 - 2017-10-05
         Initial Release
     1.1 - 2017-11-09
         Verifies that TV Show title name doesn't have any special characters that would interfere with file renaming.
-
+    1.2 - 2017-11-13
+        Suppressed errors in the Get-IMDBTVShowSeasonEpisodes function for episodes fetched from IMDB that haven't aired yet.
 
 Use the following to recreate tv show folder structure so you can verify the scirpt will work the way you want it to before running in on your real files.
 param([Parameter(Mandatory)][string] $SourceBackupFolder)
@@ -92,12 +93,14 @@ function Get-IMDBTVShowSeasonEpisodes {
     $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
     $Results =  $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*list_item*'}
 
-    foreach ($Episode in $Results) {
-        $SeasonEpisode = (($Episode.childNodes[1].childNodes[1].textContent).Trim()) -split ','
-        $EpisodeName = 'S{0:D2}' -f [int]$SeasonEpisode[0].SubString(1) + '.E{0:D2}' -f [int]$SeasonEpisode[1].Trim().SubString(2) + ' ' + ($Episode.childNodes[3].childNodes[5].innerText).Trim()
+    try {
+        foreach ($Episode in $Results) {
+            $SeasonEpisode = (($Episode.childNodes[1].childNodes[1].textContent).Trim()) -split ','
+            $EpisodeName = 'S{0:D2}' -f [int]$SeasonEpisode[0].SubString(1) + '.E{0:D2}' -f [int]$SeasonEpisode[1].Trim().SubString(2) + ' ' + ($Episode.childNodes[3].childNodes[5].innerText).Trim()
         
-        Write-Output $EpisodeName 
-    }
+            Write-Output $EpisodeName 
+        }
+    } catch {}
 }
 
     }
