@@ -29,6 +29,17 @@ PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/tit
         Verifies that TV Show title name doesn't have any special characters that would interfere with file renaming.
 
 
+Use the following to recreate tv show folder structure so you can verify the scirpt will work the way you want it to before running in on your real files.
+param([Parameter(Mandatory)][string] $SourceBackupFolder)
+New-Item -ItemType Directory -Path C:\#Tools\$(Split-Path $SourceBackupFolder -Leaf)
+Get-ChildItem -Path $SourceBackupFolder -Recurse | 
+ForEach-Object {
+    if($_.Gettype().Name -eq 'DirectoryInfo'){ 
+        New-Item -Name $_.BaseName -ItemType Directory -Path C:\#Tools\$($_.Parent)} 
+    else{ 
+        New-Item -Name $_.Name -Path C:\#Tools\$(if($_.Directory.Parent.Name -ne 'TV Shows'){$_.Directory.Parent.Name + '\'})$(Split-Path $_.Directory -leaf)
+    }
+}
 #>
 
 [CmdletBinding()]
