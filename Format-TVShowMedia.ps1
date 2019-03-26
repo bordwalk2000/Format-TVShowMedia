@@ -61,7 +61,7 @@ BEGIN {
         )
 
         $HTML = Invoke-WebRequest -Uri $url -ErrorAction Stop
-        $results = $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*title_wrapper*'}
+        $results = $HTML.ParsedHtml.body.getElementsByTagName("div") | Where-Object {$_.classname -like '*title_wrapper*'}
 
         Write-Output ($results.getElementsByTagName("h1") | Select-Object -ExpandProperty innerText).trim()
 
@@ -75,12 +75,12 @@ BEGIN {
 
         $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
         $Results = $HTML.ParsedHtml.body.getElementsByClassName("seasons-and-year-nav")
-        $SeasonsList = (($Results | select -expand innerhtml) -split ("<div>") -split (“&nbsp;&nbsp;") | ? {$_ -like "*season=*" -or $_ -like "*tt_eps_sn_mr*"}).trim()
+        $SeasonsList = (($Results | Select-Object -expand innerhtml) -split ("<div>") -split (“&nbsp;&nbsp;") | Where-Object {$_ -like "*season=*" -or $_ -like "*tt_eps_sn_mr*"}).trim()
 
         if ($SeasonsList -like "*tt_eps_sn_mr*") {
             $URL = 'https://www.imdb.com/' + (($SeasonsList -like "*tt_eps_sn_mr*").TrimStart('<A href="/') -split '"')[0]
             $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
-            $Results = (((($HTML.ParsedHtml.body.getElementsByClassName("episode-list-select") | select -ExpandProperty textContent) -split '  OR  ')[0]).trimStart("Season: ") -split (" ")).trim()
+            $Results = (((($HTML.ParsedHtml.body.getElementsByClassName("episode-list-select") | Select-Object -ExpandProperty textContent) -split '  OR  ')[0]).trimStart("Season: ") -split (" ")).trim()
             $SeasonURL = 'https://www.imdb.com/' + ((($SeasonsList.TrimStart('<A href="/') -split ';')[0]) -split "=")[0] + '='
 
             foreach ($Season in $Results) {
@@ -93,7 +93,7 @@ BEGIN {
 
         }
         else {
-            foreach ($Season in (($Results | select -expand innerhtml) -split ("<div>") -split (“&nbsp;&nbsp;") | ? {$_ -like "*season=*" -or $_ -like "*tt_eps_sn_mr*"}).trim()) {
+            foreach ($Season in (($Results | Select-Object -expand innerhtml) -split ("<div>") -split (“&nbsp;&nbsp;") | Where-Object {$_ -like "*season=*" -or $_ -like "*tt_eps_sn_mr*"}).trim()) {
                 $props = @{
                     'Season' = (($Season -split '>')[1]).Substring(0, 1)
                     'URL'    = 'https://www.imdb.com/' + ($Season.TrimStart('<A href="/') -split ';')[0]
@@ -110,12 +110,12 @@ BEGIN {
         )
 
         $HTML = Invoke-WebRequest -Uri $URL -ErrorAction Stop
-        $Results = $HTML.ParsedHtml.body.getElementsByTagName("div") | Where {$_.classname -like '*list_item*'}
+        $Results = $HTML.ParsedHtml.body.getElementsByTagName("div") | Where-Object {$_.classname -like '*list_item*'}
 
         try {
             foreach ($Episode in $Results) {
-                $SeasonEpisode = ($Episode.childNodes[0].childNodes | Select -ExpandProperty InnerText) -split ',' -replace '\D+(\d+)', '$1'
-                $EpisodeName = 'S{0:D2}' -f [int]$SeasonEpisode[0] + '.E{0:D2}' -f [int]$SeasonEpisode[1] + ' ' + ($Episode.childNodes[0].childNodes | select -ExpandProperty Title).Trim()
+                $SeasonEpisode = ($Episode.childNodes[0].childNodes | Select-Object -ExpandProperty InnerText) -split ',' -replace '\D+(\d+)', '$1'
+                $EpisodeName = 'S{0:D2}' -f [int]$SeasonEpisode[0] + '.E{0:D2}' -f [int]$SeasonEpisode[1] + ' ' + ($Episode.childNodes[0].childNodes | Select-Object -ExpandProperty Title).Trim()
 
                 Write-Output $EpisodeName
             }
@@ -139,9 +139,9 @@ PROCESS {
 
         #Search for the TV Show and pulls URL from the top result.
         $HTML = Invoke-WebRequest -Uri $SearchQuery -ErrorAction Stop
-        $Results = $HTML.ParsedHtml.body.getElementsByTagName("table") | Where {$_.classname -eq 'findList'} |
-            foreach {
-            $_.getElementsByTagName("tr") | Where {$_.classname -like '*findResult*'}} | Select-Object -First 1
+        $Results = $HTML.ParsedHtml.body.getElementsByTagName("table") | Where-Object {$_.classname -eq 'findList'} |
+            ForEach-Object {
+            $_.getElementsByTagName("tr") | Where-Object {$_.classname -like '*findResult*'}} | Select-Object -First 1
 
         $url = 'https://www.imdb.com/' + (($Results.innerHTML -split '<td class=result_text>')[-1] -split '"')[1]
         #$url = 'https://www.imdb.com/find?ref_=nv_sr_fn&q=' + (($Results.innerHTML -split '<td class=result_text>')[-1] -replace '.*?>([^<]*).*', '$1') + 'l&s=all'
@@ -152,12 +152,12 @@ PROCESS {
     $TVShowTitle = (Get-IMDBTVShowTitle -url $url) -replace "[$IllegalChars]", ''
 
     Get-IMDBTVShowSeasons -url $url | Sort-Object Season |
-        Foreach {
+        ForEach-Object {
         #Create Season Folder if it doesn't exisist
         if (!(Test-Path -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season)))) {New-Item -ItemType Directory -Path ("$FolderPath\Season {0:D2}" -f ([int]$_.Season))}
 
         Get-IMDBTVShowSeasonEpisodes -url $_.url |
-            Foreach {
+            ForEach-Object {
             $EpisodeNumber = ($_ -split ' ')[0]
             $EpisodeTitle = $_ -replace "[$IllegalChars]", ''
 
@@ -173,8 +173,8 @@ PROCESS {
     }
 
     #Looks for folders with no files in them and then deletes the files if any were found.
-    Get-ChildItem -Path $FolderPath -recurse | Where {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r |
-                Where {!$_.PSIsContainer}).Length -eq 0} |
+    Get-ChildItem -Path $FolderPath -recurse | Where-Object {$_.PSIsContainer -and @(Get-ChildItem -Lit $_.Fullname -r |
+                Where-Object {!$_.PSIsContainer}).Length -eq 0} |
         Remove-Item -Recurse
 
 }
