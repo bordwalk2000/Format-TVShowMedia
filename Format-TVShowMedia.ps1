@@ -19,7 +19,7 @@ PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/tit
 
 .NOTES
     Author: Bradley Herbst
-    Version: 2.0.1
+    Version: 2.1
     Last Updated: July 11th, 2018
 
     ChangeLog
@@ -33,16 +33,18 @@ PS C:\> Format-TVShowMedia -FolderPath "C:\Folder" -URL "http://www.imdb.com/tit
         IMDB changed their website enough to break the script.  Updated the script to fix those corrections.
     2.0.1 - 2019-03-26
         Cleaning up code formating.  Code Layout & Changing a few double quotes to single quotes.
+    2.1 - 2019-03-27
+        TV Show first aired year added to TV Show folder name.
 
 Use the following to recreate tv show folder structure so you can verify the scirpt will work the way you want it to before running in on your real files.
 param([Parameter(Mandatory)][string] $SourceBackupFolder)
-New-Item -ItemType Directory -Path C:\#Tools\$(Split-Path $SourceBackupFolder -Leaf)
+New-Item -ItemType Directory -Path $(Split-Path $SourceBackupFolder -Leaf)
 Get-ChildItem -Path $SourceBackupFolder -Recurse |
 ForEach-Object {
     if($_.Gettype().Name -eq 'DirectoryInfo'){
         New-Item -Name $_.BaseName -ItemType Directory -Path C:\#Tools\$($_.Parent)}
     else{
-        New-Item -Name $_.Name -Path C:\#Tools\$(if($_.Directory.Parent.Name -ne 'TV Shows'){$_.Directory.Parent.Name + '\'})$(Split-Path $_.Directory -leaf)
+        New-Item -Name $_.Name -Path $(Split-Path $_.Directory -leaf)
     }
 }
 #>
@@ -63,9 +65,12 @@ BEGIN {
         )
 
         $HTML = Invoke-WebRequest -Uri $url -ErrorAction Stop
-        $results = $HTML.ParsedHtml.body.getElementsByTagName('div') | Where-Object {$_.classname -like '*title_wrapper*'}
+        $titlewrapper = $HTML.ParsedHtml.body.getElementsByTagName('div') | Where-Object {$_.classname -like '*title_wrapper*'}
+        
+        $title = ($titlewrapper.getElementsByTagName('h1') | Select-Object -ExpandProperty innerText).trim()
+        $date = ($titlewrapper.textContent.trim()).split(' | ')[-2].trim('(').split('–')[0]
 
-        Write-Output ($results.getElementsByTagName('h1') | Select-Object -ExpandProperty innerText).trim()
+        Write-Output "$title ($date)"
     }
 
     function Get-IMDBTVShowSeasons {
@@ -144,11 +149,14 @@ PROCESS {
             $_.getElementsByTagName('tr') | Where-Object {$_.classname -like '*findResult*'}} | Select-Object -First 1
 
         $url = 'https://www.imdb.com/' + (($Results.innerHTML -split '<td class=result_text>')[-1] -split '"')[1]
-        $url = 'https://www.imdb.com/find?ref_=nv_sr_fn&q=' + (($Results.innerHTML -split '<td class=result_text>')[-1] -replace '.*?>([^<]*).*', '$1') + 'l&s=all'
     }
 
     $IllegalChars = [string]::join('', ([System.IO.Path]::GetInvalidFileNameChars())) -replace '\\', '\\'
-    $TVShowTitle = (Get-IMDBTVShowTitle -url $url) -replace "[$IllegalChars]", ''
+    $ParentFolderTitle = (Get-IMDBTVShowTitle -url $url) -replace "[$IllegalChars]", ''
+    $TVShowTitle = $ParentFolderTitle.split(' ')[0]
+    
+    Rename-Item -Path  $FolderPath -NewName $ParentFolderTitle
+    $FolderPath = (Split-Path -Path $FolderPath -Parent) + "\$ParentFolderTitle"
 
     Get-IMDBTVShowSeasons -url $url | Sort-Object Season |
         ForEach-Object {
